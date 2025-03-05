@@ -1,0 +1,8 @@
+streamlit
+openai
+langchain
+chromadb
+tiktoken
+faiss-cpu
+numpy
+pandas
