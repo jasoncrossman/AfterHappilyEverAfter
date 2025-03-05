@@ -1,8 +1,12 @@
---upgrade-strategy eager
-
 streamlit
 openai
 langchain
+langchain_community
 langchain_openai
 faiss-cpu
+unstructured
+chromadb
 tiktoken
+numpy
+PyMuPDF
+python-dotenv
