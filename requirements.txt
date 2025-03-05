@@ -1,8 +1,5 @@
 streamlit
-openai
 langchain
-chromadb
-tiktoken
+langchain_community
 faiss-cpu
-numpy
-pandas
+openai
