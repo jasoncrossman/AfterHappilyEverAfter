@@ -1,20 +1,4 @@
-# Ignore macOS system files
-.DS_Store
-.Spotlight-V100
-.Trashes
-._*
-
-# Ignore Python virtual environment
-venv/
+rag_env/
+.env
 __pycache__/
-
-# Ignore compiled Python files
-*.pyc
-*.pyo
-*.pyd
-
-# Ignore log and cache files
-*.log
-*.cache
-*.bak
-
+faiss_index/
