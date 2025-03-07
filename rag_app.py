@@ -1,68 +1,51 @@
 import os
 import streamlit as st
 from langchain_community.vectorstores import FAISS
-from langchain_openai import OpenAIEmbeddings
+from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from dotenv import load_dotenv
-from langchain_community.document_loaders import TextLoader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
 
+# Load environment variables (API key)
 load_dotenv()
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
-# Initialize embeddings
-embeddings = OpenAIEmbeddings()
+# Initialize LLM model
+llm = ChatOpenAI(model="gpt-3.5-turbo", temperature=0.7, openai_api_key=OPENAI_API_KEY)
 
-# Define FAISS index path
-index_path = "faiss_index"
+# Load FAISS index with your book embeddings
+vector_store = FAISS.load_local("faiss_index", OpenAIEmbeddings(), allow_dangerous_deserialization=True)
 
-# Function to create FAISS index if missing
-def create_faiss_index():
-    st.warning("FAISS index not found. Rebuilding... ⏳")
-    
-    docs_folder = "./book_docs/"
-    all_docs = []
+# Streamlit UI
+st.title("Ask Jason Crossman - *After Happily Ever After*")
+st.write("Got questions about healing after divorce? Ask below!")
 
-    for file in os.listdir(docs_folder):
-        if file.endswith('.txt'):
-            loader = TextLoader(os.path.join(docs_folder, file), encoding='utf-8')
-            docs = loader.load()
-            all_docs.extend(docs)
-
-    # Split documents into chunks
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-    doc_chunks = text_splitter.split_documents(all_docs)
-
-    # Create FAISS index
-    vector_store = FAISS.from_documents(doc_chunks, embeddings)
-    vector_store.save_local(index_path)
-    
-    st.success("✅ FAISS index rebuilt successfully!")
-
-# Load or recreate FAISS index
-if os.path.exists(f"{index_path}/index.faiss"):
-    st.info("✅ Loading FAISS index...")
-    vector_store = FAISS.load_local(index_path, embeddings, allow_dangerous_deserialization=True)
-else:
-    create_faiss_index()
-    vector_store = FAISS.load_local(index_path, embeddings, allow_dangerous_deserialization=True)
-
-# Set up LLM
-from langchain_openai import ChatOpenAI
-llm = ChatOpenAI(model="gpt-3.5-turbo")
-
-st.title("📖 Ask My Book - After Happily Ever After")
-st.write("Type a question about my book, and I'll fetch the most relevant answer!")
-
-# User Input
-user_input = st.text_input("What would you like to ask?")
+# User input
+user_input = st.text_input("Type your question here and press Enter:")
 
 if user_input:
-    docs = vector_store.similarity_search(user_input, k=3)
-    context = "\n\n".join([doc.page_content for doc in docs])
-    response = llm.predict(f"Answer the question based on the following context:\n\n{context}\n\nQuestion: {user_input}")
+    # Retrieve relevant book content
+    retrieved_docs = vector_store.similarity_search(user_input, k=5)  # Increased context retrieval
+    context = "\n\n".join([doc.page_content for doc in retrieved_docs])
 
-    st.subheader("Answer:")
-    st.write(response)
+    # Custom prompt to ensure the AI speaks in your tone
+    prompt_template = f"""You are Jason Crossman, an Emmy Award-winning director, author, and storyteller.
+    You have a fun, engaging, and often humorous way of writing. You connect deeply with your audience and use a conversational tone.
+    Your job is to answer the user's question using information from the following retrieved context from your book.
+    If the answer is not in the book, do not make something up—just say you don't know.
 
-    # Call-to-action (CTA)
-    st.markdown("### 📢 Want to read the full book?")
-    st.markdown("[Click here to pre-order now!](https://publishizer.com/after-happily-ever-after/)")
+    Context:
+    {context}
+
+    User Question:
+    {user_input}
+
+    Your Response:
+    """
+    
+    # Generate response
+    response = llm(prompt_template)
+
+    # Append CTA to every response
+    response_text = response + "\n\n💡 *Want to dive deeper?* Grab my book *After Happily Ever After* here: [Pre-Order Now](https://publishizer.com/after-happily-ever-after/)!"
+
+    # Display response
+    st.write(response_text)
