@@ -1,51 +1,67 @@
-import os
 import streamlit as st
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_community.vectorstores import FAISS
-from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from dotenv import load_dotenv
+import os
 
-# Load environment variables (API key)
+# Load environment variables
 load_dotenv()
+
+# Initialize OpenAI API key
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+if not OPENAI_API_KEY:
+    st.error("API Key not found! Please check your environment variables.")
+    st.stop()
 
-# Initialize LLM model
-llm = ChatOpenAI(model="gpt-3.5-turbo", temperature=0.7, openai_api_key=OPENAI_API_KEY)
+# Initialize embeddings
+embeddings = OpenAIEmbeddings()
 
-# Load FAISS index with your book embeddings
-vector_store = FAISS.load_local("faiss_index", OpenAIEmbeddings(), allow_dangerous_deserialization=True)
+# Load FAISS vector store
+try:
+    vector_store = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
+except Exception as e:
+    st.error(f"Error loading FAISS index: {e}")
+    st.stop()
+
+# Initialize Chat Model
+llm = ChatOpenAI(model="gpt-3.5-turbo")
 
 # Streamlit UI
-st.title("Ask Jason Crossman - *After Happily Ever After*")
-st.write("Got questions about healing after divorce? Ask below!")
+st.title("📚 After Happily Ever After - Chat with Jason's Book")
+
+st.write("👋 Ask anything about the book, and I'll answer in my own words!")
 
 # User input
-user_input = st.text_input("Type your question here and press Enter:")
+user_input = st.text_input("💬 What would you like to ask?", "")
 
 if user_input:
-    # Retrieve relevant book content
-    retrieved_docs = vector_store.similarity_search(user_input, k=5)  # Increased context retrieval
-    context = "\n\n".join([doc.page_content for doc in retrieved_docs])
+    # Retrieve relevant context from the vector store
+    docs = vector_store.similarity_search(user_input, k=3)
+    context = "\n\n".join([doc.page_content for doc in docs])
 
-    # Custom prompt to ensure the AI speaks in your tone
-    prompt_template = f"""You are Jason Crossman, an Emmy Award-winning director, author, and storyteller.
-    You have a fun, engaging, and often humorous way of writing. You connect deeply with your audience and use a conversational tone.
-    Your job is to answer the user's question using information from the following retrieved context from your book.
-    If the answer is not in the book, do not make something up—just say you don't know.
+    # Generate response
+    prompt = f"""
+    You are Jason Crossman, the author of *After Happily Ever After*. 
+    Answer the user's question in **your own voice**, with humor, empathy, and encouragement.
 
-    Context:
+    **Context from your book:**  
     {context}
 
-    User Question:
-    {user_input}
+    **User Question:** {user_input}
 
-    Your Response:
+    **Your Response:**
     """
     
-    # Generate response
-    response = llm(prompt_template)
-
-    # Append CTA to every response
-    response_text = response + "\n\n💡 *Want to dive deeper?* Grab my book *After Happily Ever After* here: [Pre-Order Now](https://publishizer.com/after-happily-ever-after/)!"
-
+    response = llm.invoke(prompt)
+    
     # Display response
-    st.write(response_text)
+    if hasattr(response, "content"):
+        st.write(response.content)
+    else:
+        st.write(response)
+
+    # Call-to-action message
+    st.markdown(
+        "\n\n💡 *Want to dive deeper?* Grab my book **After Happily Ever After** here: "
+        "[Pre-Order Now](https://publishizer.com/after-happily-ever-after/)!"
+    )
