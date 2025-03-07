@@ -1,40 +1,68 @@
 import os
-from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+import streamlit as st
 from langchain_community.vectorstores import FAISS
-from langchain.chains import RetrievalQA
+from langchain_openai import OpenAIEmbeddings
 from dotenv import load_dotenv
+from langchain_community.document_loaders import TextLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 
 load_dotenv()
 
-# Load embeddings
+# Initialize embeddings
 embeddings = OpenAIEmbeddings()
-vector_store = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
 
-# Set up the LLM
+# Define FAISS index path
+index_path = "faiss_index"
+
+# Function to create FAISS index if missing
+def create_faiss_index():
+    st.warning("FAISS index not found. Rebuilding... ⏳")
+    
+    docs_folder = "./book_docs/"
+    all_docs = []
+
+    for file in os.listdir(docs_folder):
+        if file.endswith('.txt'):
+            loader = TextLoader(os.path.join(docs_folder, file), encoding='utf-8')
+            docs = loader.load()
+            all_docs.extend(docs)
+
+    # Split documents into chunks
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+    doc_chunks = text_splitter.split_documents(all_docs)
+
+    # Create FAISS index
+    vector_store = FAISS.from_documents(doc_chunks, embeddings)
+    vector_store.save_local(index_path)
+    
+    st.success("✅ FAISS index rebuilt successfully!")
+
+# Load or recreate FAISS index
+if os.path.exists(f"{index_path}/index.faiss"):
+    st.info("✅ Loading FAISS index...")
+    vector_store = FAISS.load_local(index_path, embeddings, allow_dangerous_deserialization=True)
+else:
+    create_faiss_index()
+    vector_store = FAISS.load_local(index_path, embeddings, allow_dangerous_deserialization=True)
+
+# Set up LLM
+from langchain_openai import ChatOpenAI
 llm = ChatOpenAI(model="gpt-3.5-turbo")
 
-# Create QA retrieval system
-rag = RetrievalQA.from_chain_type(llm=llm, retriever=vector_store.as_retriever())
+st.title("📖 Ask My Book - After Happily Ever After")
+st.write("Type a question about my book, and I'll fetch the most relevant answer!")
 
-# Define your CTA
-CTA = """
-\n---\n
-📘 **Discover More in 'After Happily Ever After':**  
-Navigate divorce and loss, reclaim your identity, and build a life you love.  
-🌟 [Pre-order your copy here](https://publishizer.com/after-happily-ever-after/)
-"""
+# User Input
+user_input = st.text_input("What would you like to ask?")
 
-# Interactive prompt loop
-def chat():
-    print("Ask a question about the book ('exit' to quit):")
-    while True:
-        user_input = input("\nYou: ")
-        if user_input.lower() == "exit":
-            print("Goodbye!")
-            break
-        response = rag.invoke(user_input)
-        # Append the CTA to each response
-        print(f"\nAI: {response['result']}{CTA}")
+if user_input:
+    docs = vector_store.similarity_search(user_input, k=3)
+    context = "\n\n".join([doc.page_content for doc in docs])
+    response = llm.predict(f"Answer the question based on the following context:\n\n{context}\n\nQuestion: {user_input}")
 
-if __name__ == "__main__":
-    chat()
+    st.subheader("Answer:")
+    st.write(response)
+
+    # Call-to-action (CTA)
+    st.markdown("### 📢 Want to read the full book?")
+    st.markdown("[Click here to pre-order now!](https://publishizer.com/after-happily-ever-after/)")
